@@ -1,4 +1,3 @@
-
 workflows:
   android-workflow:
     name: Build Android Release APK

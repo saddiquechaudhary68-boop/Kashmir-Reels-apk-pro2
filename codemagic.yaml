@@ -1,3 +1,4 @@
+
 workflows:
   android-workflow:
     name: Build Android Release APK
@@ -6,7 +7,7 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Generate Complete Android Scaffolding (v2 Embedding Only)
+      - name: Generate Complete App Directory Structure
         script: |
           mkdir -p lib
           mkdir -p android/app/src/main/kotlin/com/kashmir/reels
@@ -33,6 +34,17 @@ workflows:
 
           # 2. android/build.gradle
           cat << 'EOF' > android/build.gradle
+          buildscript {
+              ext.kotlin_version = '1.8.22'
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+              }
+          }
           allprojects {
               repositories {
                   google()
@@ -53,51 +65,67 @@ workflows:
 
           # 3. android/settings.gradle
           cat << 'EOF' > android/settings.gradle
-          pluginManagement {
-              def flutterSdkPath = {
-                  def properties = new Properties()
-                  def file = new File(rootProject.projectDir, "local.properties")
-                  if (file.exists()) {
-                      file.withReader("UTF-8") { reader -> properties.load(reader) }
-                  }
-                  return properties.getProperty("flutter.sdk")
-              }()
-              includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
+          include ':app'
+
+          def localPropertiesFile = new File(rootProject.projectDir, "local.properties")
+          def properties = new Properties()
+
+          if (localPropertiesFile.exists()) {
+              localPropertiesFile.withReader("UTF-8") { reader -> properties.load(reader) }
           }
-          plugins {
-              id "dev.flutter.flutter-gradle-plugin" version "1.0.0" apply false
-          }
-          include ":app"
+
+          def flutterSdkPath = properties.getProperty("flutter.sdk")
+          assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+          apply from: "$flutterSdkPath/packages/flutter_tools/gradle/app_plugin_loader.gradle"
           EOF
 
           # 4. android/app/build.gradle
           cat << 'EOF' > android/app/build.gradle
-          plugins {
-              id "com.android.application"
-              id "kotlin-android"
-              id "dev.flutter.flutter-gradle-plugin"
+          def localProperties = new Properties()
+          def localPropertiesFile = rootProject.file('local.properties')
+          if (localPropertiesFile.exists()) {
+              localPropertiesFile.withReader('UTF-8') { reader ->
+                  localProperties.load(reader)
+              }
           }
+
+          def flutterRoot = localProperties.getProperty('flutter.sdk')
+          if (flutterRoot == null) {
+              throw new RuntimeException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+          }
+
+          apply plugin: 'com.android.application'
+          apply plugin: 'kotlin-android'
+          apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
+
           android {
               namespace "com.kashmir.reels"
-              compileSdk 34
+              compileSdkVersion 34
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+
               defaultConfig {
                   applicationId "com.kashmir.reels"
-                  minSdk 21
-                  targetSdk 34
+                  minSdkVersion 21
+                  targetSdkVersion 34
                   versionCode 1
                   versionName "1.0"
               }
+
               buildTypes {
                   release {
                       signingConfig signingConfigs.debug
                   }
               }
           }
+
           flutter {
               source '../..'
           }
@@ -141,6 +169,7 @@ workflows:
           cat << 'EOF' > android/app/src/main/kotlin/com/kashmir/reels/MainActivity.kt
           package com.kashmir.reels
           import io.flutter.embedding.android.FlutterActivity
+
           class MainActivity: FlutterActivity() {
           }
           EOF
